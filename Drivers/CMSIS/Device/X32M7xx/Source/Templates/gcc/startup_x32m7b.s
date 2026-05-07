@@ -92,7 +92,7 @@ reset:
      * ---- Step 3: bl lowlevel_init ----
      *
      * In u-boot this is called via cpu_init_crit -> lowlevel_init.
-     * Our lowlevel_init (in nsing/soc.c) does:
+     * Our lowlevel_init (in xcore/soc.c) does:
      *   - SystemInit()          : FPU enable, VTOR, TCM size config, PWR
      *   - cache_init()          : Invalidate + enable I-Cache & D-Cache
      *
@@ -104,7 +104,7 @@ reset:
      * ---- Step 4: bl _main ----
      *
      * In u-boot, _main sets up the C runtime and calls board_init_r.
-     * Our _main (in nsing/soc.c) does:
+     * Our _main (in xcore/soc.c) does:
      *   - Copy one contiguous runtime image from FLASH -> ITCM
      *   - Copy .data          from FLASH -> AHB_SRAM
      *   - Copy .app_data      from FLASH -> DTCM

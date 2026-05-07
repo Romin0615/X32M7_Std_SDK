@@ -489,11 +489,6 @@ Status_card SD_Erase_Block(sd_card_t* card, uint32_t startBlock, uint32_t blockC
     Status_card status_temp  = Status_CardStatusBusy;
     uint32_t timeout_block = SD_BLOCKERASE_TIME;    /* 250ms erase timeout by default */
     
-    if(startBlock + blockCount > card->sd_card_information.blockCount)
-    {
-        return Status_CardOutOfRange;
-    }
-    
     /* polling card status idle */
     status_temp = SD_PollingCardStatusBusy(card, SD_CARD_ACCESS_WAIT_IDLE_TIMEOUT);
     if (Status_CardStatusIdle != status_temp)
@@ -502,13 +497,15 @@ Status_card SD_Erase_Block(sd_card_t* card, uint32_t startBlock, uint32_t blockC
     }
     
     eraseBlockStart = startBlock;
-    eraseBlockEnd   = eraseBlockStart + blockCount - 1U;
     
     /* SDSC card */
     if (0U == (card->sd_card_information.flags & (uint32_t)SD_SupportHighCapacityFlag))
     {
-        eraseBlockStart = startBlock * FSL_SDMMC_DEFAULT_BLOCK_SIZE;
-        eraseBlockEnd   = eraseBlockEnd * FSL_SDMMC_DEFAULT_BLOCK_SIZE;
+        eraseBlockEnd   = eraseBlockStart + ((blockCount - 1U) * FSL_SDMMC_DEFAULT_BLOCK_SIZE);
+    }
+    else
+    {
+        eraseBlockEnd   = eraseBlockStart + blockCount - 1U;
     }
     
     /* CMD32 */
@@ -606,11 +603,6 @@ Status_card SD_ReadBlocks(sd_card_t *card, uint32_t *buffer, uint32_t startBlock
     SDHOST_ADMAconfig *dmaConfig;
     Status_card status_temp;
     
-    if(startBlock + blockCount > card->sd_card_information.blockCount)
-    {
-        return Status_CardOutOfRange;
-    }
-    
     /* polling card status idle */
     status_temp = SD_PollingCardStatusBusy(card, SD_CARD_ACCESS_WAIT_IDLE_TIMEOUT);
     if (Status_CardStatusIdle != status_temp)
@@ -693,12 +685,6 @@ Status_card SD_WriteBlocks(sd_card_t *card, uint32_t *buffer, uint32_t startBloc
     SDHOST_ADMAconfig *dmaConfig;
     SDHOST_ADMAconfig dmaConfigtemp;
     Status_card status_temp;
-    
-    if(startBlock + blockCount > card->sd_card_information.blockCount)
-    {
-        return Status_CardOutOfRange;
-    }
-    
     /* polling card status idle */
     status_temp = SD_PollingCardStatusBusy(card, SD_CARD_ACCESS_WAIT_IDLE_TIMEOUT);
     if (Status_CardStatusIdle != status_temp)
