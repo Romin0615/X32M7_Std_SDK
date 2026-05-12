@@ -164,7 +164,7 @@ void SPI_Init(SPI_Module* SPIx, const SPI_InitType* SPI_InitStruct)
     /* Get the SPIx CTRL1 value */
     tmpregister = SPIx->CTRL1;
     /* Clear BIDIMode, BIDIOE, RxONLY, SSM, SSI, LSBFirst, BR, MSTR, CPOL and CPHA bits */
-    tmpregister &= CTRL1_CLR_MASK;
+    tmpregister &= ~CTRL1_CLR_MASK;
     /* Configure SPIx: direction, NSS management, first transmitted bit, BaudRate prescaler
        master/salve mode, CPOL and CPHA */
     /* Set BIDImode, BIDIOE and RxONLY bits according to DataDirection value */
