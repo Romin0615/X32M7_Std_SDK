@@ -43,25 +43,37 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #endif
 
-#ifdef USB_HS_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*IAR Compiler */
-    #pragma data_alignment=4
+#ifdef USB_INTERNAL_DMA_ENABLED
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
-#endif /* USB_HS_INTERNAL_DMA_ENABLED */
+#endif /* USB_INTERNAL_DMA_ENABLED */
 __ALIGN_BEGIN uint32_t USBD_ep_status __ALIGN_END  = 0;
 
-#ifdef USB_HS_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*IAR Compiler */
-    #pragma data_alignment=4
+#ifdef USB_INTERNAL_DMA_ENABLED
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
-#endif /* USB_HS_INTERNAL_DMA_ENABLED */
+#endif /* USB_INTERNAL_DMA_ENABLED */
 __ALIGN_BEGIN uint32_t  USBD_default_cfg __ALIGN_END  = 0;
 
-#ifdef USB_HS_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*IAR Compiler */
-    #pragma data_alignment=4
+#ifdef USB_INTERNAL_DMA_ENABLED
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
-#endif /* USB_HS_INTERNAL_DMA_ENABLED */
+#endif /* USB_INTERNAL_DMA_ENABLED */
 __ALIGN_BEGIN uint32_t  USBD_cfg_status __ALIGN_END  = 0;
 
 

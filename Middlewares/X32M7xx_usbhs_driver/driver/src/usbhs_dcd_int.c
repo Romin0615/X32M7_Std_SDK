@@ -300,7 +300,16 @@ static uint32_t USBDEV_HandleOutEP_ISTR(USB_CORE_MODULE *USBx)
                     douteptxsiz = USB_READ_REG32((&USBx->regs.OUTEPCSR[epnum]->DOUTEPTXSIZ));
                     /*ToDo : handle more than one single MPS size packet */
                     USBx->dev.out_ep[epnum].xfer_count = USBx->dev.out_ep[epnum].maxpacket - (douteptxsiz & USBHS_DOUTEPTXSIZ_TLEN);
-                    
+
+#if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+                    if ((SCB->CCR & SCB_CCR_DC_Msk) != 0U) 
+                    {
+                        SCB_InvalidateDCache_by_Addr(
+                            (uint32_t*)USBx->dev.out_ep[epnum].xfer_buff,
+                            (int32_t)USBx->dev.out_ep[epnum].xfer_count);
+                    }
+#endif
+
                     /* Inform upper layer: data ready */
                     /* RX COMPLETE */
                     USBD_DEV_INT_fops->DataOutStage(USBx , epnum);
@@ -333,6 +342,14 @@ static uint32_t USBDEV_HandleOutEP_ISTR(USB_CORE_MODULE *USBx)
             if(doutepintsts & USBHS_DOUTEPINTSTS_STUPPDNEIF)
             {
                 USB_WRITE_REG32(&USBx->regs.OUTEPCSR[epnum]->DOUTEPINTSTS, USBHS_DOUTEPINTSTS_STUPPDNEIF);
+
+#if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+                    if ((SCB->CCR & SCB_CCR_DC_Msk) != 0U) 
+                    {
+                        SCB_InvalidateDCache_by_Addr((uint32_t*)USBx->dev.setup_packet, 8);
+                    }
+#endif
+
                 /* inform the upper layer that a setup packet is available */
                 /* SETUP COMPLETE */
                 USBD_DEV_INT_fops->SetupStage(USBx);
@@ -875,7 +892,16 @@ static uint32_t USBDEV_HandleEachOutEP_ISTR(USB_CORE_MODULE *USBx)
                     douteptxsiz = USB_READ_REG32((&USBx->regs.OUTEPCSR[epnum]->DOUTEPTXSIZ));
                     /*ToDo : handle more than one single MPS size packet */
                     USBx->dev.out_ep[epnum].xfer_count = USBx->dev.out_ep[epnum].maxpacket - (douteptxsiz & USBHS_DOUTEPTXSIZ_TLEN);
-                    
+
+#if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+                    if ((SCB->CCR & SCB_CCR_DC_Msk) != 0U) 
+                    {
+                        SCB_InvalidateDCache_by_Addr(
+                            (uint32_t*)USBx->dev.out_ep[epnum].xfer_buff,
+                            (int32_t)USBx->dev.out_ep[epnum].xfer_count);
+                    }
+#endif
+
                     /* Inform upper layer: data ready */
                     /* RX COMPLETE */
                     USBD_DEV_INT_fops->DataOutStage(USBx , epnum);
@@ -908,6 +934,14 @@ static uint32_t USBDEV_HandleEachOutEP_ISTR(USB_CORE_MODULE *USBx)
             if(doutepintsts & USBHS_DOUTEPINTSTS_STUPPDNEIF)
             {
                 USB_WRITE_REG32(&USBx->regs.OUTEPCSR[epnum]->DOUTEPINTSTS, USBHS_DOUTEPINTSTS_STUPPDNEIF);
+                
+#if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+                    if ((SCB->CCR & SCB_CCR_DC_Msk) != 0U) 
+                    {
+                        SCB_InvalidateDCache_by_Addr((uint32_t*)USBx->dev.setup_packet, 8);
+                    }
+#endif
+
                 /* inform the upper layer that a setup packet is available */
                 /* SETUP COMPLETE */
                 USBD_DEV_INT_fops->SetupStage(USBx);

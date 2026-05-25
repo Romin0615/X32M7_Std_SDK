@@ -71,8 +71,12 @@ DFU_MAL_Prop_TypeDef* tMALTab[MAX_USED_MEDIA] =
 };
 
 #ifdef USB_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*!< IAR Compiler */
-    #pragma data_alignment=4   
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
 #endif /* USB_INTERNAL_DMA_ENABLED */
 
@@ -87,8 +91,12 @@ __ALIGN_BEGIN const uint8_t* usbd_dfu_StringDesc[MAX_USED_MEDIA] __ALIGN_END  = 
 };
 
 #ifdef USB_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*!< IAR Compiler */
-    #pragma data_alignment=4   
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
 #endif /* USB_INTERNAL_DMA_ENABLED */
 /* RAM Buffer for Downloaded Data */

@@ -73,39 +73,59 @@ USBD_Class_cb_TypeDef  USBD_PRINTER_cb =
 };
 
 #ifdef USB_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*IAR Compiler */
-    #pragma data_alignment=4   
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
 #endif /* USB_INTERNAL_DMA_ENABLED */
 __ALIGN_BEGIN uint8_t USBD_PRNT_CfgDesc  [USB_PRNT_CONFIG_DESC_SIZ] __ALIGN_END ;
 
 #ifdef USB_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*IAR Compiler */
-    #pragma data_alignment=4   
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
 #endif /* USB_INTERNAL_DMA_ENABLED */
 __ALIGN_BEGIN static __IO uint32_t  USBD_PRINTER_AltSet  __ALIGN_END = 0;
 
 
 #ifdef USB_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*IAR Compiler */
-    #pragma data_alignment=4   
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
 #endif /* USB_INTERNAL_DMA_ENABLED */
 __ALIGN_BEGIN uint8_t USB_Rx_Buffer   [PRINTER_DATA_MAX_PACKET_SIZE] __ALIGN_END ;
 
 
 #ifdef USB_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*IAR Compiler */
-    #pragma data_alignment=4   
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
 #endif /* USB_INTERNAL_DMA_ENABLED */
 __ALIGN_BEGIN uint8_t CmdBuff[PRINTER_CMD_PACKET_SIZE] __ALIGN_END ;
 
 
 #ifdef USB_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*IAR Compiler */
-    #pragma data_alignment=4   
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
 #endif /* USB_INTERNAL_DMA_ENABLED */
 /* USB PRNT device Configuration Descriptor */

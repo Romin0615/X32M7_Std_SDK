@@ -44,29 +44,45 @@
 #include "log.h"
 
 #ifdef USB_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*!< IAR Compiler */
-    #pragma data_alignment=4   
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
 #endif /* USB_INTERNAL_DMA_ENABLED */
 __ALIGN_BEGIN HID_Machine_TypeDef        HID_Machine __ALIGN_END ;
 
 #ifdef USB_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*!< IAR Compiler */
-    #pragma data_alignment=4   
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
 #endif /* USB_INTERNAL_DMA_ENABLED */
 __ALIGN_BEGIN HID_Report_TypeDef         HID_Report __ALIGN_END ;
 
 #ifdef USB_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*!< IAR Compiler */
-    #pragma data_alignment=4   
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
 #endif /* USB_INTERNAL_DMA_ENABLED */
 __ALIGN_BEGIN USB_Setup_TypeDef          HID_Setup __ALIGN_END ;
 
 #ifdef USB_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*!< IAR Compiler */
-    #pragma data_alignment=4   
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
 #endif /* USB_INTERNAL_DMA_ENABLED */
 __ALIGN_BEGIN USBH_HIDDesc_TypeDef       HID_Desc __ALIGN_END ; 
