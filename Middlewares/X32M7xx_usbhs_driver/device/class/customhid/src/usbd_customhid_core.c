@@ -79,29 +79,45 @@ extern uint8_t PrevXferDone;
 __ALIGN_BEGIN uint8_t Report_buf[4] __ALIGN_END;
 
 #ifdef USB_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*!< IAR Compiler */
-    #pragma data_alignment=4   
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
 #endif /* USB_INTERNAL_DMA_ENABLED */        
 __ALIGN_BEGIN static uint32_t  USBD_HID_AltSet  __ALIGN_END = 0;
 
 #ifdef USB_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*!< IAR Compiler */
-    #pragma data_alignment=4   
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
 #endif /* USB_INTERNAL_DMA_ENABLED */      
 __ALIGN_BEGIN static uint32_t  USBD_HID_Protocol  __ALIGN_END = 0;
 
 #ifdef USB_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*!< IAR Compiler */
-    #pragma data_alignment=4   
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
 #endif /* USB_INTERNAL_DMA_ENABLED */  
 __ALIGN_BEGIN static uint32_t  USBD_HID_IdleState __ALIGN_END = 0;
 
 #ifdef USB_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*!< IAR Compiler */
-    #pragma data_alignment=4   
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
 #endif /* USB_INTERNAL_DMA_ENABLED */ 
 /* USB HID device Configuration Descriptor */
@@ -168,8 +184,12 @@ __ALIGN_BEGIN static uint8_t USBD_CUSTOM_HID_CfgDesc[USB_CUSTOM_HID_CONFIG_DESC_
 } ;
 
 #ifdef USB_INTERNAL_DMA_ENABLED
-  #if defined ( __ICCARM__ ) /*!< IAR Compiler */
-    #pragma data_alignment=4   
+  #if defined ( __ICCARM__ )
+    #if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+      #pragma data_alignment=32
+    #else
+      #pragma data_alignment=4
+    #endif
   #endif
 #endif 
 

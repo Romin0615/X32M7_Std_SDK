@@ -2071,3 +2071,4 @@ void USB_SetEPStatus(USB_CORE_MODULE *USBx, USB_EP *ep, uint32_t Status)
 }
 
 #endif
+

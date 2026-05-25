@@ -199,6 +199,18 @@ uint32_t USBDEV_EP_PrepareRx( USB_CORE_MODULE *USBx, uint8_t ep_addr, uint8_t *p
     if(USBx->cfg.dma_enable == 1)
     {
         ep->dma_addr = (uint32_t)pbuf;
+        /* Flush any dirty cache lines covering this buffer before DMA starts.
+         * Required when the buffer shares a 32-byte cache line with adjacent
+         * CPU-written variables (e.g. CmdBuff shares its line with cdcLen).
+         * Without this flush, the post-DMA SCB_InvalidateDCache_by_Addr call
+         * would discard those dirty lines without writing them back, corrupting
+         * adjacent variables. */
+#if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+        if ((SCB->CCR & SCB_CCR_DC_Msk) != 0U) 
+        {
+            SCB_CleanDCache_by_Addr((uint32_t*)pbuf, (int32_t)buf_len);
+        }
+#endif
     }
     if(tmp_1 == 0)
     {
@@ -237,6 +249,13 @@ uint32_t USBDEV_EP_Tx (USB_CORE_MODULE *USBx, uint8_t ep_addr, uint8_t *pbuf, ui
     if(USBx->cfg.dma_enable == 1)
     {
         ep->dma_addr = (uint32_t)pbuf;
+        /* Write back dirty cache lines before DMA reads TX buffer, if address is cached */
+#if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+        if ((SCB->CCR & SCB_CCR_DC_Msk) != 0U) 
+        {
+            SCB_CleanDCache_by_Addr((uint32_t*)pbuf, (int32_t)buf_len);
+        }
+#endif
     }
     if(ep->num == 0)
     {
