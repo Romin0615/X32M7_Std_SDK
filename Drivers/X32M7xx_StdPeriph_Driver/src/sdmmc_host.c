@@ -584,9 +584,46 @@ static void SD_configSDMABufferSize(sd_card_t *card, uint32_t *buffer, uint32_t 
 }
 
 /**
+ *\*\name   SD_IRQHandler.
+ *\*\fun    Interrupt handler for SD card transfers. Processes SDMA boundary crossing,
+ *\*\       transfer completion, and error events. Called from platform IRQ handler.
+ *\*\param  card : pointer to SD card structure
+ *\*\return none
+ */
+void SD_IRQHandler(sd_card_t *card)
+{
+    uint32_t intsts = card->SDHOSTx->INTSTS;
+
+    /* Handle SDMA boundary crossing: reload current buffer address */
+    if (intsts & SDHOST_DmaCompleteFlag)
+    {
+        SDMMC_ClrFlag(card->SDHOSTx, SDHOST_DmaCompleteFlag);
+        uint32_t sdma_addr = card->SDHOSTx->DSADD;
+        card->SDHOSTx->DSADD = sdma_addr;
+    }
+
+    /* Handle data transfer complete */
+    if (intsts & SDHOST_DataCompleteFlag)
+    {
+        SDMMC_ClrFlag(card->SDHOSTx, SDHOST_DataCompleteFlag);
+        SDMMC_ConfigInt(card->SDHOSTx, SDHOST_DataDMAFlag | SDHOST_DmaCompleteFlag, DISABLE);
+        card->transferState = 2;
+    }
+
+    /* Handle error events */
+    if (intsts & (SDHOST_DataErrorFlag | SDHOST_DmaErrorFlag))
+    {
+        SDMMC_ClrFlag(card->SDHOSTx, intsts & (SDHOST_DataErrorFlag | SDHOST_DmaErrorFlag));
+        SDMMC_ConfigInt(card->SDHOSTx, SDHOST_DataDMAFlag | SDHOST_DmaCompleteFlag, DISABLE);
+        card->transferState = 3;
+        card->transferErrorFlags = intsts;
+    }
+}
+
+
+/**
  *\*\name   SD_ReadBlocks.
  *\*\fun    Read data blocks from SD card.
- *\*\param  card : pointer to SD card structure
  *\*\param  buffer : pointer to data buffer for storing read data
  *\*\param  startBlock : starting block number to read from
  *\*\param  blockCount : number of blocks to read
@@ -598,71 +635,75 @@ static void SD_configSDMABufferSize(sd_card_t *card, uint32_t *buffer, uint32_t 
  */
 Status_card SD_ReadBlocks(sd_card_t *card, uint32_t *buffer, uint32_t startBlock, uint32_t blockCount)
 {
-    SDMMC_Transfer transfer;
-    SDHOST_ADMAconfig dmaConfigtemp;
-    SDHOST_ADMAconfig *dmaConfig;
     Status_card status_temp;
-    
+    uint32_t timeout;
+
     /* polling card status idle */
     status_temp = SD_PollingCardStatusBusy(card, SD_CARD_ACCESS_WAIT_IDLE_TIMEOUT);
     if (Status_CardStatusIdle != status_temp)
     {
         return Status_PollingCardIdleFailed;
     }
-      
-    if(card->card_workmode.dma == SDMMC_NODMA)
-    {
-        dmaConfig = NULL;
-    }
-    else if(card->card_workmode.dma == SDMMC_SDMA)
-    {
-        dmaConfig = &dmaConfigtemp;
-        dmaConfig->dmaMode = DmaModeSimple;
-        dmaConfig->admaTable = NULL;
-        dmaConfig->admaTableWords = 0;
-        SD_configSDMABufferSize(card,buffer,blockCount);
-    }
-    else //ADMA
-    {
-        dmaConfig = &dmaConfigtemp;
-        dmaConfig->dmaMode = DmaModeAdma2;  
-        dmaConfig->admaTable = buffer;
-        dmaConfig->admaTableWords = (*buffer & 0xFFFF0000) >> 16;
-    }
-    
-    transfer.data.enableIgnoreError = DISABLE;
-    transfer.data.dataType = SDHOST_TransferDataNormal;
-    transfer.data.blockCount = blockCount;
-    transfer.data.blockSize = FSL_SDMMC_DEFAULT_BLOCK_SIZE;
-    transfer.data.rxData = buffer;
-    transfer.data.txData = NULL;
 
-    if(blockCount <= 1)
+    /* Configure SDMA buffer size */
+    SD_configSDMABufferSize(card, buffer, blockCount);
+
+    /* Set SDMA data buffer address */
+    card->SDHOSTx->DSADD = (uint32_t)buffer;
+
+    /* Select SDMA mode (Simple DMA) */
+    card->SDHOSTx->CTRL1 = (card->SDHOSTx->CTRL1 & ~SDHOST_CTRL1_DMASEL) | DmaModeSimple;
+
+    /* Configure block count and block size */
+    card->SDHOSTx->BLKCFG = ((blockCount << SDHOST_BLOCK_COUNT_OFFSET) & SDHOST_BLKCFG_CNT)
+                          | FSL_SDMMC_DEFAULT_BLOCK_SIZE;
+
+    /* Configure transfer mode */
+    SDMMC_TModeStructInit(&card->TMODE_truct);
+    card->TMODE_truct.DMAE   = SDHOST_TMODE_DMAENABLE;
+    card->TMODE_truct.DATDIR = SDHOST_TMODE_DATDIR_READ;
+    card->TMODE_truct.BCNTE  = (blockCount > 1) ? SDHOST_TMODE_BLOCKCNTENABLE : SDHOST_TMODE_BLOCKCNTDISABLE;
+    card->TMODE_truct.BLKSEL = (blockCount > 1) ? SDHOST_TMODE_MULTIBLK : SDHOST_TMODE_SINGLEBLK;
+    card->TMODE_truct.ACMDE  = (blockCount > 1) ? SDHOST_TMODE_AC12EN : SDHOST_TMODE_NOACMDEN;
+
+    /* Configure command descriptor */
+    card->command.index = (blockCount > 1) ? SDMMC_ReadMultipleBlock : SDMMC_ReadSingleBlock;
+    card->command.argument = startBlock;
+    card->command.type = CARD_CommandTypeNormal;
+    card->command.responseType = CARD_ResponseTypeR1;
+    card->command.flags = SDHOST_DataPresentFlag;
+    card->command.responseErrorFlags = 0x00;
+
+    /* Send command - TMODE write triggers command and SDMA start */
+    SDMMC_SendCommand(card->SDHOSTx, &card->command, &card->TMODE_truct);
+
+    /* Wait for command response (polling, microsecond-level) */
+    if (SDMMC_WaitCommandDone(card->SDHOSTx, &card->command, ENABLE) != SDMMC_SUCCESS)
     {
-        transfer.command.index = SDMMC_ReadSingleBlock;
-        transfer.data.AutoCommand12_23 = NoAutoCommand;
-    }
-    else
-    {
-        transfer.command.index = SDMMC_ReadMultipleBlock;
-        transfer.data.AutoCommand12_23 = AutoCommand12;
-    }
-    transfer.command.argument = startBlock;
-    transfer.command.type = CARD_CommandTypeNormal;
-    transfer.command.responseType = CARD_ResponseTypeR1;
-    transfer.command.flags = 0x00;
-    transfer.command.responseErrorFlags = 0x00;
-    
-    if(SDMMC_TransferBlocking(card->SDHOSTx,dmaConfig,&transfer,&card->TMODE_truct) != SDMMC_SUCCESS)
-    {
-        status_temp = Status_Fail;
-    }
-    else
-    {
-        status_temp = Status_Success;
+        return Status_Fail;
     }
 
-    return status_temp;
+    /* Enable interrupt signal - command done, SDMA is now transferring data */
+    card->transferState = 1;
+    SDMMC_ConfigInt(card->SDHOSTx, SDHOST_DataDMAFlag | SDHOST_DmaCompleteFlag, ENABLE);
+
+    /* Wait for data transfer completion via interrupt signal */
+    timeout = SDMMC_TIMEOUT_VALUE;
+    while (card->transferState == 1 && timeout > 0)
+    {
+        timeout--;
+    }
+
+    if (card->transferState == 2)
+    {
+        card->transferState = 0;
+        return Status_Success;
+    }
+
+    /* Timeout or error occurred */
+    SDMMC_ConfigInt(card->SDHOSTx, SDHOST_DataDMAFlag | SDHOST_DmaCompleteFlag, DISABLE);
+    card->transferState = 0;
+    return Status_Fail;
 }
 
 
@@ -681,69 +722,217 @@ Status_card SD_ReadBlocks(sd_card_t *card, uint32_t *buffer, uint32_t startBlock
  */
 Status_card SD_WriteBlocks(sd_card_t *card, uint32_t *buffer, uint32_t startBlock, uint32_t blockCount)
 {
-    SDMMC_Transfer transfer;
-    SDHOST_ADMAconfig *dmaConfig;
-    SDHOST_ADMAconfig dmaConfigtemp;
     Status_card status_temp;
+    uint32_t timeout;
+
     /* polling card status idle */
     status_temp = SD_PollingCardStatusBusy(card, SD_CARD_ACCESS_WAIT_IDLE_TIMEOUT);
     if (Status_CardStatusIdle != status_temp)
     {
         return Status_PollingCardIdleFailed;
     }
-    
-    if(card->card_workmode.dma == SDMMC_NODMA)
-    {
-        dmaConfig = NULL;
-    }
-    else if(card->card_workmode.dma == SDMMC_SDMA)
-    {
-        dmaConfig = &dmaConfigtemp;
-        dmaConfig->dmaMode = DmaModeSimple;
-        dmaConfig->admaTable = NULL;
-        dmaConfig->admaTableWords = 0;
-        SD_configSDMABufferSize(card,buffer,blockCount);
-    }
-    else //ADMA
-    {
-        dmaConfig = &dmaConfigtemp;
-        dmaConfig->dmaMode = DmaModeAdma2;  
-        dmaConfig->admaTable = buffer;
-        dmaConfig->admaTableWords = (*buffer & 0xFFFF0000) >> 16;
-    }
-    transfer.data.enableIgnoreError = DISABLE;
-    transfer.data.dataType = SDHOST_TransferDataNormal;
-    transfer.data.blockCount = blockCount;
-    transfer.data.blockSize = FSL_SDMMC_DEFAULT_BLOCK_SIZE;
-    transfer.data.rxData = NULL;
-    transfer.data.txData = buffer;
 
-    if(blockCount <= 1)
+    /* Configure SDMA buffer size */
+    SD_configSDMABufferSize(card, buffer, blockCount);
+
+    /* Set SDMA data buffer address */
+    card->SDHOSTx->DSADD = (uint32_t)buffer;
+
+    /* Select SDMA mode (Simple DMA) */
+    card->SDHOSTx->CTRL1 = (card->SDHOSTx->CTRL1 & ~SDHOST_CTRL1_DMASEL) | DmaModeSimple;
+
+    /* Configure block count and block size */
+    card->SDHOSTx->BLKCFG = ((blockCount << SDHOST_BLOCK_COUNT_OFFSET) & SDHOST_BLKCFG_CNT)
+                          | FSL_SDMMC_DEFAULT_BLOCK_SIZE;
+
+    /* Configure transfer mode for write */
+    SDMMC_TModeStructInit(&card->TMODE_truct);
+    card->TMODE_truct.DMAE   = SDHOST_TMODE_DMAENABLE;
+    card->TMODE_truct.DATDIR = SDHOST_TMODE_DATDIR_WRITE;
+    card->TMODE_truct.BCNTE  = (blockCount > 1) ? SDHOST_TMODE_BLOCKCNTENABLE : SDHOST_TMODE_BLOCKCNTDISABLE;
+    card->TMODE_truct.BLKSEL = (blockCount > 1) ? SDHOST_TMODE_MULTIBLK : SDHOST_TMODE_SINGLEBLK;
+    card->TMODE_truct.ACMDE  = (blockCount > 1) ? SDHOST_TMODE_AC12EN : SDHOST_TMODE_NOACMDEN;
+
+    /* Configure command descriptor */
+    card->command.index = (blockCount > 1) ? SDMMC_WriteMultipleBlock : SDMMC_WriteSingleBlock;
+    card->command.argument = startBlock;
+    card->command.type = CARD_CommandTypeNormal;
+    card->command.responseType = CARD_ResponseTypeR1;
+    card->command.flags = SDHOST_DataPresentFlag;
+    card->command.responseErrorFlags = 0x00;
+
+    /* Send command - TMODE write triggers command and SDMA start */
+    SDMMC_SendCommand(card->SDHOSTx, &card->command, &card->TMODE_truct);
+
+    /* Wait for command response (polling, microsecond-level) */
+    if (SDMMC_WaitCommandDone(card->SDHOSTx, &card->command, ENABLE) != SDMMC_SUCCESS)
     {
-        transfer.command.index = SDMMC_WriteSingleBlock;
-        transfer.data.AutoCommand12_23 = NoAutoCommand;
+        return Status_Fail;
     }
-    else
+
+    /* Enable interrupt signal - command done, SDMA is now transferring data */
+    card->transferState = 1;
+    SDMMC_ConfigInt(card->SDHOSTx, SDHOST_DataDMAFlag | SDHOST_DmaCompleteFlag, ENABLE);
+
+    /* Wait for data transfer completion via interrupt signal */
+    timeout = SDMMC_TIMEOUT_VALUE;
+    while (card->transferState == 1 && timeout > 0)
     {
-        transfer.command.index = SDMMC_WriteMultipleBlock;
-        transfer.data.AutoCommand12_23 = AutoCommand12;
+        timeout--;
     }
-    transfer.command.argument = startBlock;
-    transfer.command.type = CARD_CommandTypeNormal;
-    transfer.command.responseType = CARD_ResponseTypeR1;
-    transfer.command.flags = 0x00;
-    transfer.command.responseErrorFlags = 0x00;
-    
-    if(SDMMC_TransferBlocking(card->SDHOSTx,dmaConfig,&transfer,&card->TMODE_truct) != SDMMC_SUCCESS)
+
+    if (card->transferState == 2)
     {
-        status_temp = Status_Fail;
+        card->transferState = 0;
+        return Status_Success;
     }
-    else
+
+    /* Timeout or error occurred */
+    SDMMC_ConfigInt(card->SDHOSTx, SDHOST_DataDMAFlag | SDHOST_DmaCompleteFlag, DISABLE);
+    card->transferState = 0;
+    return Status_Fail;
+}
+
+
+/**
+ *\*\name   SD_ReadBlocks_IT.
+ *\*\fun    Non-blocking read data blocks from SD card. Initiates transfer and
+ *\*\       returns immediately. Completion signaled via card->transferState.
+ *\*\param  card : pointer to SD card structure
+ *\*\param  buffer : pointer to data buffer for storing read data
+ *\*\param  startBlock : starting block number to read from
+ *\*\param  blockCount : number of blocks to read
+ *\*\return Status_card
+ *\*\          - Status_Success : read command sent, data transfer in progress
+ *\*\          - Status_PollingCardIdleFailed : card busy timeout
+ *\*\          - Status_Fail : command failed
+ */
+Status_card SD_ReadBlocks_IT(sd_card_t *card, uint32_t *buffer, uint32_t startBlock, uint32_t blockCount)
+{
+    Status_card status_temp;
+
+    /* polling card status idle */
+    status_temp = SD_PollingCardStatusBusy(card, SD_CARD_ACCESS_WAIT_IDLE_TIMEOUT);
+    if (Status_CardStatusIdle != status_temp)
     {
-        status_temp = Status_Success;
+        return Status_PollingCardIdleFailed;
     }
-    
-    return status_temp;
+
+    /* Configure SDMA buffer size */
+    SD_configSDMABufferSize(card, buffer, blockCount);
+
+    /* Set SDMA data buffer address */
+    card->SDHOSTx->DSADD = (uint32_t)buffer;
+
+    /* Select SDMA mode (Simple DMA) */
+    card->SDHOSTx->CTRL1 = (card->SDHOSTx->CTRL1 & ~SDHOST_CTRL1_DMASEL) | DmaModeSimple;
+
+    /* Configure block count and block size */
+    card->SDHOSTx->BLKCFG = ((blockCount << SDHOST_BLOCK_COUNT_OFFSET) & SDHOST_BLKCFG_CNT)
+                          | FSL_SDMMC_DEFAULT_BLOCK_SIZE;
+
+    /* Configure transfer mode */
+    SDMMC_TModeStructInit(&card->TMODE_truct);
+    card->TMODE_truct.DMAE   = SDHOST_TMODE_DMAENABLE;
+    card->TMODE_truct.DATDIR = SDHOST_TMODE_DATDIR_READ;
+    card->TMODE_truct.BCNTE  = (blockCount > 1) ? SDHOST_TMODE_BLOCKCNTENABLE : SDHOST_TMODE_BLOCKCNTDISABLE;
+    card->TMODE_truct.BLKSEL = (blockCount > 1) ? SDHOST_TMODE_MULTIBLK : SDHOST_TMODE_SINGLEBLK;
+    card->TMODE_truct.ACMDE  = (blockCount > 1) ? SDHOST_TMODE_AC12EN : SDHOST_TMODE_NOACMDEN;
+
+    /* Configure command descriptor */
+    card->command.index = (blockCount > 1) ? SDMMC_ReadMultipleBlock : SDMMC_ReadSingleBlock;
+    card->command.argument = startBlock;
+    card->command.type = CARD_CommandTypeNormal;
+    card->command.responseType = CARD_ResponseTypeR1;
+    card->command.flags = SDHOST_DataPresentFlag;
+    card->command.responseErrorFlags = 0x00;
+
+    /* Send command - TMODE write triggers command and SDMA start */
+    SDMMC_SendCommand(card->SDHOSTx, &card->command, &card->TMODE_truct);
+
+    /* Wait for command response only (polling, microsecond-level) */
+    if (SDMMC_WaitCommandDone(card->SDHOSTx, &card->command, ENABLE) != SDMMC_SUCCESS)
+    {
+        return Status_Fail;
+    }
+
+    /* Enable interrupt signal - command done, SDMA is now transferring data */
+    card->transferState = 1;
+    SDMMC_ConfigInt(card->SDHOSTx, SDHOST_DataDMAFlag | SDHOST_DmaCompleteFlag, ENABLE);
+
+    /* Return immediately - data transfer in progress via SDMA + interrupt */
+    return Status_Success;
+}
+
+
+/**
+ *\*\name   SD_WriteBlocks_IT.
+ *\*\fun    Non-blocking write data blocks to SD card. Initiates transfer and
+ *\*\       returns immediately. Completion signaled via card->transferState.
+ *\*\param  card : pointer to SD card structure
+ *\*\param  buffer : pointer to data buffer containing data to write
+ *\*\param  startBlock : starting block number to write to
+ *\*\param  blockCount : number of blocks to write
+ *\*\return Status_card
+ *\*\          - Status_Success : write command sent, data transfer in progress
+ *\*\          - Status_PollingCardIdleFailed : card busy timeout
+ *\*\          - Status_Fail : command failed
+ */
+Status_card SD_WriteBlocks_IT(sd_card_t *card, uint32_t *buffer, uint32_t startBlock, uint32_t blockCount)
+{
+    Status_card status_temp;
+
+    /* polling card status idle */
+    status_temp = SD_PollingCardStatusBusy(card, SD_CARD_ACCESS_WAIT_IDLE_TIMEOUT);
+    if (Status_CardStatusIdle != status_temp)
+    {
+        return Status_PollingCardIdleFailed;
+    }
+
+    /* Configure SDMA buffer size */
+    SD_configSDMABufferSize(card, buffer, blockCount);
+
+    /* Set SDMA data buffer address */
+    card->SDHOSTx->DSADD = (uint32_t)buffer;
+
+    /* Select SDMA mode (Simple DMA) */
+    card->SDHOSTx->CTRL1 = (card->SDHOSTx->CTRL1 & ~SDHOST_CTRL1_DMASEL) | DmaModeSimple;
+
+    /* Configure block count and block size */
+    card->SDHOSTx->BLKCFG = ((blockCount << SDHOST_BLOCK_COUNT_OFFSET) & SDHOST_BLKCFG_CNT)
+                          | FSL_SDMMC_DEFAULT_BLOCK_SIZE;
+
+    /* Configure transfer mode for write */
+    SDMMC_TModeStructInit(&card->TMODE_truct);
+    card->TMODE_truct.DMAE   = SDHOST_TMODE_DMAENABLE;
+    card->TMODE_truct.DATDIR = SDHOST_TMODE_DATDIR_WRITE;
+    card->TMODE_truct.BCNTE  = (blockCount > 1) ? SDHOST_TMODE_BLOCKCNTENABLE : SDHOST_TMODE_BLOCKCNTDISABLE;
+    card->TMODE_truct.BLKSEL = (blockCount > 1) ? SDHOST_TMODE_MULTIBLK : SDHOST_TMODE_SINGLEBLK;
+    card->TMODE_truct.ACMDE  = (blockCount > 1) ? SDHOST_TMODE_AC12EN : SDHOST_TMODE_NOACMDEN;
+
+    /* Configure command descriptor */
+    card->command.index = (blockCount > 1) ? SDMMC_WriteMultipleBlock : SDMMC_WriteSingleBlock;
+    card->command.argument = startBlock;
+    card->command.type = CARD_CommandTypeNormal;
+    card->command.responseType = CARD_ResponseTypeR1;
+    card->command.flags = SDHOST_DataPresentFlag;
+    card->command.responseErrorFlags = 0x00;
+
+    /* Send command - TMODE write triggers command and SDMA start */
+    SDMMC_SendCommand(card->SDHOSTx, &card->command, &card->TMODE_truct);
+
+    /* Wait for command response only (polling, microsecond-level) */
+    if (SDMMC_WaitCommandDone(card->SDHOSTx, &card->command, ENABLE) != SDMMC_SUCCESS)
+    {
+        return Status_Fail;
+    }
+
+    /* Enable interrupt signal - command done, SDMA is now transferring data */
+    card->transferState = 1;
+    SDMMC_ConfigInt(card->SDHOSTx, SDHOST_DataDMAFlag | SDHOST_DmaCompleteFlag, ENABLE);
+
+    /* Return immediately - data transfer in progress via SDMA + interrupt */
+    return Status_Success;
 }
 
 
